@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fully Interactive 3D Monster Can Engine</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #020205;
+            cursor: grab;
+        }
+        body:active {
+            cursor: grabbing;
+        }
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .ui-instructions {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ffffff;
+            font-family: sans-serif;
+            font-size: 0.9rem;
+            letter-spacing: 2px;
+            pointer-events: none;
+            z-index: 10;
+            text-align: center;
+            opacity: 0.7;
+            text-shadow: 0 0 8px rgba(0,0,0,0.8);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="ui-instructions">CLICK & DRAG TO SPIN // SCROLL TO ZOOM</div>
+    <div id="canvas-container"></div>
+
+    <!-- Added OrbitControls to the importmap -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js",
+                "three/addons/controls/OrbitControls": "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/controls/OrbitControls.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        // Import the camera controls module
+        import { OrbitControls } from 'three/addons/controls/OrbitControls';
+
+        // --- 1. SETUP ENGINE ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2('#020205', 0.15);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 0, 4.5);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.2;
+        container.appendChild(renderer.domElement);
+
+        // --- 2. INITIALIZE MOUSE CONTROLS ---
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true; // Adds smooth weight/inertia when you let go
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 2;       // How close you can zoom in
+        controls.maxDistance = 10;      // How far you can zoom out
+
+        // --- 3. LIGHTING ---
+        const ambientLight = new THREE.AmbientLight('#ffffff', 0.4);
+        scene.add(ambientLight);
+
+        const keyLight = new THREE.DirectionalLight('#ffffff', 2.0);
+        keyLight.position.set(5, 5, 4);
+        scene.add(keyLight);
+
+        const fillLight = new THREE.DirectionalLight('#a5f3fc', 1.0); 
+        fillLight.position.set(-5, -2, 2);
+        scene.add(fillLight);
+
+        // --- 4. TEXTURE LOADING ---
+        const textureLoader = new THREE.TextureLoader();
+        const labelTexture = textureLoader.load('can_label.jpg');
+        const topTexture = textureLoader.load('can_top.png');
+
+        labelTexture.minFilter = THREE.LinearMipmapLinearFilter;
+        labelTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+
+        // --- 5. MATERIAL & CAN ASSEMBLY ---
+        const canGeometry = new THREE.CylinderGeometry(0.9, 0.9, 2.8, 64);
+
+        const sideMaterial = new THREE.MeshStandardMaterial({
+            map: labelTexture,
+            roughness: 0.25,
+            metalness: 0.5
+        });
+
+        const capMaterial = new THREE.MeshStandardMaterial({
+            map: topTexture,
+            roughness: 0.4,
+            metalness: 0.9
+        });
+
+        const materials = [sideMaterial, capMaterial, capMaterial];
+        const canMesh = new THREE.Mesh(canGeometry, materials);
+        scene.add(canMesh);
+
+        // --- 6. BACKGROUND COSMIC FIELD ---
+        const particleCount = 15000;
+        const particleGeometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(particleCount * 3);
+        const colors = new Float32Array(particleCount * 3);
+
+        const nebulaColors = [
+            new THREE.Color('#55ff55'), 
+            new THREE.Color('#00aa00'), 
+            new THREE.Color('#ffffff')
+        ];
+
+        for (let i = 0; i < particleCount; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const distance = 1.8 + Math.random() * 4.5;
+
+            positions[i * 3] = distance * Math.cos(angle);
+            positions[i * 3 + 1] = (Math.random() - 0.5) * 6.0;
+            positions[i * 3 + 2] = (Math.random() - 0.5) * 4.0 - 2.0; 
+
+            const selectedCol = nebulaColors[Math.floor(Math.random() * nebulaColors.length)];
+            colors[i * 3] = selectedCol.r;
+            colors[i * 3 + 1] = selectedCol.g;
+            colors[i * 3 + 2] = selectedCol.b;
+        }
+
+        particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        particleGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        const particleMaterial = new THREE.PointsMaterial({
+            size: 0.018,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.7,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+
+        const nebulaField = new THREE.Points(particleGeometry, particleMaterial);
+        scene.add(nebulaField);
+
+        // --- 7. ANIMATION LOOP ---
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getElapsedTime();
+
+            // Removed the rigid auto-rotation on the can!
+            // Instead, we let the camera background nebula subtly glide
+            nebulaField.rotation.z = delta * -0.005;
+
+            // Required to update camera position calculations when damping is enabled
+            controls.update();
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        // --- 8. RESIZE EVENT ---
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
